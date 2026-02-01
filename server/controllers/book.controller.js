@@ -42,7 +42,6 @@ exports.getStats = async (req, res) => {
   }
 };
 
-// Get all books with pagination
 exports.getBooks = async (req, res) => {
   try {
     const userId = new mongoose.Types.ObjectId(req.user.id);
@@ -51,6 +50,8 @@ exports.getBooks = async (req, res) => {
     const limit = parseInt(req.query.limit) || 5;
     const skip = (page - 1) * limit;
 
+    const { title, author, tag, status } = req.query;
+
     if (page < 1) {
       return res.status(400).json({ message: "Page must be greater than 0" });
     }
@@ -58,9 +59,27 @@ exports.getBooks = async (req, res) => {
       return res.status(400).json({ message: "Limit must be between 1 and 100" });
     }
 
-    const totalBooks = await Book.countDocuments({ created_by: userId });
+    const filterQuery = { created_by: userId };
+
+    if (title) {
+      filterQuery.title = { $regex: title.trim(), $options: "i" };
+    }
+
+    if (author) {
+      filterQuery.author = { $regex: author.trim(), $options: "i" };
+    }
+
+    if (tag) {
+      filterQuery.tags = { $in: [new RegExp(tag.trim(), "i")] };
+    }
+
+    if (status) {
+      filterQuery.status = status.trim();
+    }
+
+    const totalBooks = await Book.countDocuments(filterQuery);
     
-    const books = await Book.find({ created_by: userId })
+    const books = await Book.find(filterQuery)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);

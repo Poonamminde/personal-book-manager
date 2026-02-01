@@ -3,11 +3,12 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/axios";
-import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import CreateEditBook from "./CreateEditBook";
 import DeleteBookModal from "./DeleteBookModal";
 import BookCardList from "./BookCardList";
 import BookTableView from "./BookTableView";
+import BookFilterModal, { BookFilters } from "./BookFilterModal";
 
 type Book = {
   id: string;
@@ -34,8 +35,22 @@ type PaginatedBooksResponse = {
   };
 };
 
-const fetchBooks = async (page: number = 1, limit: number = 5): Promise<PaginatedBooksResponse> => {
-  const response = await api.get(`/books?page=${page}&limit=${limit}`);
+const fetchBooks = async (
+  page: number = 1,
+  limit: number = 5,
+  filters: BookFilters = { title: "", author: "", tag: "", status: "" }
+): Promise<PaginatedBooksResponse> => {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+  });
+
+  if (filters.title) params.append("title", filters.title);
+  if (filters.author) params.append("author", filters.author);
+  if (filters.tag) params.append("tag", filters.tag);
+  if (filters.status) params.append("status", filters.status);
+
+  const response = await api.get(`/books?${params.toString()}`);
   return response.data;
 };
 
@@ -49,13 +64,20 @@ const BookTable: React.FC = () => {
   const [editingBook, setEditingBook] = useState<Book | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [bookToDelete, setBookToDelete] = useState<Book | null>(null);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [filters, setFilters] = useState<BookFilters>({
+    title: "",
+    author: "",
+    tag: "",
+    status: "",
+  });
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["books", currentPage],
-    queryFn: () => fetchBooks(currentPage, pageSize),
+    queryKey: ["books", currentPage, filters],
+    queryFn: () => fetchBooks(currentPage, pageSize, filters),
   });
 
   const books = data?.books || [];
@@ -106,6 +128,20 @@ const BookTable: React.FC = () => {
     setIsCreateModalOpen(true);
   };
 
+  const handleApplyFilters = (newFilters: BookFilters) => {
+    setFilters(newFilters);
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = () => {
+    return !!(
+      filters.title ||
+      filters.author ||
+      filters.tag ||
+      filters.status
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="p-8 text-center">
@@ -117,15 +153,33 @@ const BookTable: React.FC = () => {
   return (
     <div className="md:p-8">
       <div className="bg-white rounded-xl shadow-lg p-6">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 flex-col sm:flex-row gap-4">
           <h2 className="md:text-2xl font-bold text-gray-800">My Books</h2>
-          <button
-            onClick={handleAddBook}
-            className="flex cursor-pointer items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition"
-          >
-            <Plus size={20} />
-            Add Book
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsFilterModalOpen(true)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
+                hasActiveFilters()
+                  ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              title="Filter books"
+            >
+              <Filter size={18} />
+              {hasActiveFilters() && (
+                <span className="bg-indigo-600 text-white text-xs rounded-full px-2 py-0.5">
+                  Active
+                </span>
+              )}
+            </button>
+            <button
+              onClick={handleAddBook}
+              className="flex cursor-pointer text-xs sm:text-sm items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition"
+            >
+              <Plus size={20} />
+              Add Book
+            </button>
+          </div>
         </div>
 
         {books.length === 0 ? (
@@ -196,6 +250,14 @@ const BookTable: React.FC = () => {
             isDeleting={deleteMutation.isPending}
           />
         )}
+
+        {/* Filter Modal */}
+        <BookFilterModal
+          isOpen={isFilterModalOpen}
+          onClose={() => setIsFilterModalOpen(false)}
+          onApply={handleApplyFilters}
+          currentFilters={filters}
+        />
       </div>
     </div>
   );
